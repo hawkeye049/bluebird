@@ -1,23 +1,24 @@
 # Decisions
 
+## HA Strategy (Multi-AZ)
+- Application Gateway v2 is deployed across Availability Zones (zones parameter).
+- VM Scale Set instances are deployed across the same zones with zone balancing enabled.
+- Azure SQL Database uses zone redundancy for staging/prod where supported.
+
+## Tier Model
+- Web/Ingress tier: Application Gateway (public subnet)
+- App tier: VMSS (private subnet)
+- Data tier: Azure SQL (private endpoint in db subnet)
+
 ## Why ARM Templates
-ARM is Azure-native, supports full Azure resource coverage, and integrates cleanly with Azure CLI and GitHub Actions.
+Azure-native IaC with broad service coverage and strong integration with Azure CLI and CI/CD.
 
-## Why VM Scale Set + Application Gateway
-- VMSS maps well to “auto-scaling group” style requirements.
-- Application Gateway provides L7 routing and health probes.
-- This design keeps complexity lower than AKS while still demonstrating HA and scaling concepts.
+## Security Choices
+- Subnet segmentation + least-privilege NSGs
+- SQL public network access disabled + Private Endpoint + Private DNS
+- Key Vault for secret storage; VMSS Managed Identity has secret get/list only
 
-## Why Azure SQL + Private Endpoint
-- Managed database (patching/backups handled by Azure).
-- Private Endpoint ensures database is not publicly accessible.
-- Private DNS zone integration enables private name resolution.
-
-## Secrets Management
-Key Vault is used for centralized secret storage. VMSS has a managed identity and is granted least-privilege secret read access.
-
-## Security
-- Subnet segmentation (public vs private vs database)
-- NSGs with least-privilege starter rules
-- SQL public network access disabled
-- TLS 1.2 enforced where applicable
+## Cost Control
+- Dev uses SQL Basic
+- Staging/Prod use S0 (adjustable based on budget/performance)
+- Storage lifecycle policy reduces long-term blob costs
