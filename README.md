@@ -2,6 +2,15 @@
 
 This repository deploys a resilient multi-tier web application foundation on Azure using ARM templates.
 
+What you MUST update before deploying
+
+In main.json, update the fileUris line under VMSS CustomScript extension to point to your real bootstrap.sh URL, for example:
+
+GitHub raw URL once the repo exists:
+https://raw.githubusercontent.com/<you>/bluebird-cloud-exercise/main/scripts/bootstrap.sh
+
+Ensure you can deploy App Gateway in your chosen region (quota/feature availability). If you hit limits, tell me your region and I’ll adjust SKUs.
+
 ## Architecture (High Level)
 - Application Gateway (public entry) in a public subnet
 - VM Scale Set (web/app tier) in a private subnet behind the gateway
