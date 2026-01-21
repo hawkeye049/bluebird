@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "env": { "value": "dev" },
+    "location": { "value": "eastus2" },
+    "vmSku": { "value": "Standard_B2s" },
+    "vmInstanceCount": { "value": 2 },
+    "sqlSkuName": { "value": "Basic" },
+    "vmAdminUsername": { "value": "azureuser" },
+    "sqlAdminUsername": { "value": "sqladminuser" }
+  }
+}
