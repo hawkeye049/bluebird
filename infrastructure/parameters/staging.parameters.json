@@ -10,6 +10,8 @@
     "sqlSkuName": { "value": "S0" },
     "vmAdminUsername": { "value": "azureuser" },
     "sqlAdminUsername": { "value": "sqladminuser" },
-    "bootstrapScriptUri": { "value": "https://raw.githubusercontent.com/YOUR_GITHUB_USER/bluebird-cloud-exercise/main/scripts/bootstrap.sh" }
+    "bootstrapScriptUri": {
+      "value": "https://raw.githubusercontent.com/hawkeye049/bluebird/refs/heads/bluebird-cloud-exercise/scripts/bootstrap.sh"
+    }
   }
 }
