@@ -1,11 +1,10 @@
 # Improvements (If More Time)
 
-- Add HTTPS on Application Gateway with Key Vault–backed certificate
+- Enforce HTTPS end-to-end (TLS on App Gateway + backend TLS) and store cert in Key Vault
 - Enable WAF policy on Application Gateway
-- Add autoscale rules for VMSS (CPU/custom metrics)
-- Add Azure Monitor + Application Insights dashboards/alerts
-- Add Storage lifecycle policies and private endpoints for storage
-- Blue/green or canary deployment strategy
-- Use Bicep for improved readability and modularization
-- Add infrastructure tests (e.g., Pester/Terratest alternative approaches)
-- Containerize app and deploy to AKS for microservices realism
+- Add autoscale rules for VMSS (CPU/custom metrics) beyond static capacity
+- Add diagnostic settings for App Gateway/SQL/VMSS into Log Analytics (centralized logging)
+- Add NSG flow logs + Traffic Analytics
+- Add blue/green or canary deployments
+- Containerize the app and deploy to AKS for more realistic microservices
+- Add private endpoints for Storage and a CDN for static assets
