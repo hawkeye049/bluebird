@@ -1,13 +1,15 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
-  "contentVersion": "1.0.0.0",
+  "contentVersion": "2.0.0.0",
   "parameters": {
     "env": { "value": "prod" },
     "location": { "value": "eastus2" },
+    "zones": { "value": ["1", "2"] },
     "vmSku": { "value": "Standard_B2s" },
     "vmInstanceCount": { "value": 3 },
     "sqlSkuName": { "value": "S0" },
     "vmAdminUsername": { "value": "azureuser" },
-    "sqlAdminUsername": { "value": "sqladminuser" }
+    "sqlAdminUsername": { "value": "sqladminuser" },
+    "bootstrapScriptUri": { "value": "https://raw.githubusercontent.com/YOUR_GITHUB_USER/bluebird-cloud-exercise/main/scripts/bootstrap.sh" }
   }
 }
