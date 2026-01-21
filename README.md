@@ -29,3 +29,8 @@ Ensure you can deploy App Gateway in your chosen region (quota/feature availabil
 2. From repo root:
    ```powershell
    ./scripts/deploy.ps1 -SubscriptionId "<SUB_ID>" -ResourceGroupName "bbg-rg-dev" -Location "eastus2" -Environment "dev"
+
+## Cleanup Bash
+-- az group delete -n bbg-rg-dev --yes --no-wait
+
+
