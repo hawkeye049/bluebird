@@ -1,9 +1,15 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
+  "contentVersion": "2.0.0.0",
   "parameters": {
     "location": { "type": "string", "defaultValue": "eastus2" },
     "env": { "type": "string", "allowedValues": ["dev", "staging", "prod"], "defaultValue": "dev" },
+
+    "zones": {
+      "type": "array",
+      "defaultValue": ["1", "2"],
+      "metadata": { "description": "Availability Zones to use in regions that support zones (e.g., eastus2). Keep to 2 zones for simplicity/quota." }
+    },
 
     "vnetAddressPrefix": { "type": "string", "defaultValue": "10.10.0.0/16" },
     "subnetPublicPrefix": { "type": "string", "defaultValue": "10.10.1.0/24" },
@@ -22,7 +28,14 @@
     "sqlSkuName": { "type": "string", "defaultValue": "Basic" },
     "sqlMaxSizeBytes": { "type": "string", "defaultValue": "2147483648" },
 
-    "appHealthPath": { "type": "string", "defaultValue": "/health" }
+    "bootstrapScriptUri": {
+      "type": "string",
+      "metadata": { "description": "Public raw URL to scripts/bootstrap.sh (e.g., GitHub raw). Required." }
+    },
+
+    "appHealthPath": { "type": "string", "defaultValue": "/health" },
+
+    "logRetentionDays": { "type": "int", "defaultValue": 30 }
   },
   "variables": {
     "prefix": "[toLower(concat('bbg-', parameters('env'), '-', uniqueString(resourceGroup().id)))]",
@@ -50,7 +63,13 @@
     "sqlDbName": "[concat(variables('prefix'), '-db')]",
 
     "privateDnsZoneNameSql": "privatelink.database.windows.net",
-    "peNameSql": "[concat(variables('prefix'), '-sql-pe')]"
+    "peNameSql": "[concat(variables('prefix'), '-sql-pe')]",
+
+    "lawName": "[concat(variables('prefix'), '-law')]",
+    "appiName": "[concat(variables('prefix'), '-appi')]",
+    "cpuAlertName": "[concat(variables('prefix'), '-cpu-alert')]",
+
+    "dbPasswordSecretName": "sql-admin-password"
   },
   "resources": [
     {
@@ -94,19 +113,6 @@
               "sourcePortRange": "*",
               "destinationAddressPrefix": "*",
               "destinationPortRange": "80"
-            }
-          },
-          {
-            "name": "Allow-VNet-Internal",
-            "properties": {
-              "priority": 150,
-              "direction": "Inbound",
-              "access": "Allow",
-              "protocol": "*",
-              "sourceAddressPrefix": "VirtualNetwork",
-              "sourcePortRange": "*",
-              "destinationAddressPrefix": "*",
-              "destinationPortRange": "*"
             }
           },
           {
@@ -155,6 +161,7 @@
       "name": "[variables('pipAgwName')]",
       "location": "[parameters('location')]",
       "sku": { "name": "Standard" },
+      "zones": "[parameters('zones')]",
       "properties": {
         "publicIPAllocationMethod": "Static",
         "dnsSettings": { "domainNameLabel": "[concat(variables('prefix'), '-app')]" }
@@ -242,316 +249,4 @@
       "kind": "StorageV2",
       "properties": {
         "minimumTlsVersion": "TLS1_2",
-        "allowBlobPublicAccess": false
-      }
-    },
-
-    {
-      "type": "Microsoft.KeyVault/vaults",
-      "apiVersion": "2023-07-01",
-      "name": "[variables('kvName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "tenantId": "[subscription().tenantId]",
-        "sku": { "family": "A", "name": "standard" },
-        "enableRbacAuthorization": false,
-        "accessPolicies": []
-      }
-    },
-
-    {
-      "type": "Microsoft.Sql/servers",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[variables('sqlServerName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "administratorLogin": "[parameters('sqlAdminUsername')]",
-        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
-        "publicNetworkAccess": "Disabled",
-        "minimalTlsVersion": "1.2"
-      }
-    },
-    {
-      "type": "Microsoft.Sql/servers/databases",
-      "apiVersion": "2023-05-01-preview",
-      "name": "[concat(variables('sqlServerName'), '/', variables('sqlDbName'))]",
-      "location": "[parameters('location')]",
-      "sku": { "name": "[parameters('sqlSkuName')]" },
-      "properties": {
-        "maxSizeBytes": "[parameters('sqlMaxSizeBytes')]",
-        "zoneRedundant": "[equals(parameters('env'), 'prod')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ]
-    },
-
-    {
-      "type": "Microsoft.Network/privateDnsZones",
-      "apiVersion": "2020-06-01",
-      "name": "[variables('privateDnsZoneNameSql')]",
-      "location": "global",
-      "properties": {}
-    },
-    {
-      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
-      "apiVersion": "2020-06-01",
-      "name": "[concat(variables('privateDnsZoneNameSql'), '/', variables('vnetName'), '-link')]",
-      "location": "global",
-      "properties": {
-        "virtualNetwork": { "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]" },
-        "registrationEnabled": false
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNameSql'))]",
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Network/privateEndpoints",
-      "apiVersion": "2023-11-01",
-      "name": "[variables('peNameSql')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "subnet": {
-          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('dbSubnetName'))]"
-        },
-        "privateLinkServiceConnections": [
-          {
-            "name": "sql-connection",
-            "properties": {
-              "privateLinkServiceId": "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]",
-              "groupIds": ["sqlServer"]
-            }
-          }
-        ]
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
-      "apiVersion": "2023-11-01",
-      "name": "[concat(variables('peNameSql'), '/sql-dns-zone-group')]",
-      "properties": {
-        "privateDnsZoneConfigs": [
-          {
-            "name": "sqlZoneConfig",
-            "properties": {
-              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNameSql'))]"
-            }
-          }
-        ]
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/privateEndpoints', variables('peNameSql'))]",
-        "[resourceId('Microsoft.Network/privateDnsZones', variables('privateDnsZoneNameSql'))]"
-      ]
-    },
-
-    {
-      "type": "Microsoft.Network/applicationGateways",
-      "apiVersion": "2023-11-01",
-      "name": "[variables('agwName')]",
-      "location": "[parameters('location')]",
-      "sku": { "name": "Standard_v2", "tier": "Standard_v2", "capacity": 1 },
-      "properties": {
-        "gatewayIPConfigurations": [
-          {
-            "name": "appGatewayIpConfig",
-            "properties": {
-              "subnet": {
-                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('publicSubnetName'))]"
-              }
-            }
-          }
-        ],
-        "frontendIPConfigurations": [
-          {
-            "name": "frontendPublicIp",
-            "properties": {
-              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipAgwName'))]" }
-            }
-          }
-        ],
-        "frontendPorts": [
-          { "name": "port80", "properties": { "port": 80 } }
-        ],
-        "backendAddressPools": [
-          { "name": "vmssPool", "properties": {} }
-        ],
-        "backendHttpSettingsCollection": [
-          {
-            "name": "httpSettings",
-            "properties": {
-              "port": 80,
-              "protocol": "Http",
-              "cookieBasedAffinity": "Disabled",
-              "requestTimeout": 30,
-              "probe": { "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/probes/healthProbe')]" }
-            }
-          }
-        ],
-        "probes": [
-          {
-            "name": "healthProbe",
-            "properties": {
-              "protocol": "Http",
-              "path": "[parameters('appHealthPath')]",
-              "interval": 30,
-              "timeout": 30,
-              "unhealthyThreshold": 3,
-              "match": { "statusCodes": ["200-399"] }
-            }
-          }
-        ],
-        "httpListeners": [
-          {
-            "name": "listener80",
-            "properties": {
-              "frontendIPConfiguration": {
-                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/frontendIPConfigurations/frontendPublicIp')]"
-              },
-              "frontendPort": {
-                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/frontendPorts/port80')]"
-              },
-              "protocol": "Http"
-            }
-          }
-        ],
-        "requestRoutingRules": [
-          {
-            "name": "rule1",
-            "properties": {
-              "ruleType": "Basic",
-              "httpListener": { "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/httpListeners/listener80')]" },
-              "backendAddressPool": { "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/backendAddressPools/vmssPool')]" },
-              "backendHttpSettings": { "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/backendHttpSettingsCollection/httpSettings')]" }
-            }
-          }
-        ]
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
-        "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipAgwName'))]"
-      ]
-    },
-
-    {
-      "type": "Microsoft.Compute/virtualMachineScaleSets",
-      "apiVersion": "2023-09-01",
-      "name": "[variables('vmssName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "[parameters('vmSku')]",
-        "tier": "Standard",
-        "capacity": "[parameters('vmInstanceCount')]"
-      },
-      "identity": { "type": "SystemAssigned" },
-      "properties": {
-        "upgradePolicy": { "mode": "Rolling" },
-        "virtualMachineProfile": {
-          "storageProfile": {
-            "imageReference": {
-              "publisher": "Canonical",
-              "offer": "0001-com-ubuntu-server-jammy",
-              "sku": "22_04-lts-gen2",
-              "version": "latest"
-            },
-            "osDisk": { "createOption": "FromImage" }
-          },
-          "osProfile": {
-            "computerNamePrefix": "app",
-            "adminUsername": "[parameters('vmAdminUsername')]",
-            "adminPassword": "[parameters('vmAdminPassword')]"
-          },
-          "networkProfile": {
-            "networkInterfaceConfigurations": [
-              {
-                "name": "nicConfig",
-                "properties": {
-                  "primary": true,
-                  "ipConfigurations": [
-                    {
-                      "name": "ipconfig1",
-                      "properties": {
-                        "subnet": {
-                          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('appSubnetName'))]"
-                        },
-                        "applicationGatewayBackendAddressPools": [
-                          {
-                            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('agwName')), '/backendAddressPools/vmssPool')]"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          "extensionProfile": {
-            "extensions": [
-              {
-                "name": "bootstrap",
-                "properties": {
-                  "publisher": "Microsoft.Azure.Extensions",
-                  "type": "CustomScript",
-                  "typeHandlerVersion": "2.1",
-                  "autoUpgradeMinorVersion": true,
-                  "settings": {
-                    "fileUris": [
-                      "https://raw.githubusercontent.com/YOUR_GITHUB_OR_PUBLIC_URL/bootstrap.sh"
-                    ],
-                    "commandToExecute": "bash bootstrap.sh"
-                  }
-                }
-              }
-            ]
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
-        "[resourceId('Microsoft.Network/applicationGateways', variables('agwName'))]"
-      ]
-    },
-
-    {
-      "type": "Microsoft.KeyVault/vaults/accessPolicies",
-      "apiVersion": "2023-07-01",
-      "name": "[concat(variables('kvName'), '/add')]",
-      "properties": {
-        "accessPolicies": [
-          {
-            "tenantId": "[subscription().tenantId]",
-            "objectId": "[reference(resourceId('Microsoft.Compute/virtualMachineScaleSets', variables('vmssName')), '2023-09-01', 'Full').identity.principalId]",
-            "permissions": {
-              "secrets": ["get", "list"]
-            }
-          }
-        ]
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
-        "[resourceId('Microsoft.Compute/virtualMachineScaleSets', variables('vmssName'))]"
-      ]
-    }
-  ],
-  "outputs": {
-    "appFqdn": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipAgwName'))).dnsSettings.fqdn]"
-    },
-    "appUrl": {
-      "type": "string",
-      "value": "[concat('http://', reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipAgwName'))).dnsSettings.fqdn)]"
-    },
-    "resourcePrefix": {
-      "type": "string",
-      "value": "[variables('prefix')]"
-    }
-  }
-}
+        "supports
