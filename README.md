@@ -1,36 +1,53 @@
-# Bluebird Cloud Engineer Exercise (Azure + ARM)
+# Bluebird Cloud Engineer Exercise — Azure High Availability (ARM)
 
-This repository deploys a resilient multi-tier web application foundation on Azure using ARM templates.
+This repository deploys a resilient, secure Azure architecture using ARM templates.
 
-What you MUST update before deploying
+## Bootstrap Script Source (your branch)
+The VM Scale Set bootstraps using this script:
+https://raw.githubusercontent.com/hawkeye049/bluebird/refs/heads/bluebird-cloud-exercise/scripts/bootstrap.sh
 
-In main.json, update the fileUris line under VMSS CustomScript extension to point to your real bootstrap.sh URL, for example:
+## How this meets the Technical Requirements
 
-GitHub raw URL once the repo exists:
-https://raw.githubusercontent.com/<you>/bluebird-cloud-exercise/main/scripts/bootstrap.sh
+### 1) Network Layer
+- VNet with public + private subnets (public, app, db)
+- Subnets are deployed in an Availability Zone-enabled region, and compute/ingress are zonal
+- NAT Gateway provides outbound internet access for the private app subnet
+- Least-privilege NSGs:
+  - Public subnet allows only HTTP (80) inbound to Application Gateway
+  - App subnet denies internet inbound; allows only from public subnet on 80
+  - DB subnet allows only 1433 inbound from app subnet; SQL public access disabled
 
-Ensure you can deploy App Gateway in your chosen region (quota/feature availability). If you hit limits, tell me your region and I’ll adjust SKUs.
+### 2) Compute Layer
+- VM Scale Set (2–4 instances) across at least 2 Availability Zones (`zones` + `zoneBalance`)
+- Application Gateway v2 is zone-redundant and load balances traffic to VMSS
+- Bootstrap via Custom Script Extension pulling `bootstrap.sh`
+- Health probe configured at `/health`
 
-## Architecture (High Level)
-- Application Gateway (public entry) in a public subnet
-- VM Scale Set (web/app tier) in a private subnet behind the gateway
-- Azure SQL Database with Private Endpoint (not publicly accessible)
-- NAT Gateway for outbound access from private subnet
-- Storage Account for static assets
-- Key Vault for secret storage (VMSS identity has secret read access)
+### 3) Database Layer
+- Azure SQL Database (managed)
+- Zone redundancy enabled for staging/prod (`zoneRedundant: true`) where supported
+- Automated backups are enabled by default for Azure SQL Database
+- Database is not public: SQL public network access disabled + Private Endpoint + Private DNS
 
-## Prerequisites
-- Azure subscription (free/trial OK)
-- Azure CLI installed and logged in (`az login`)
-- PowerShell (for deploy script)
+### 4) Storage
+- Storage Account (Blob) for static assets
+- HTTPS-only, TLS 1.2, no public blob access
+- Lifecycle policy deletes blobs under `static/` after 90 days
 
-## Deploy (Local)
-1. Clone repo
-2. From repo root:
-   ```powershell
-   ./scripts/deploy.ps1 -SubscriptionId "<SUB_ID>" -ResourceGroupName "bbg-rg-dev" -Location "eastus2" -Environment "dev"
+### 5) Security
+- Key Vault stores DB credentials (secret: `sql-admin-password`)
+- VMSS uses Managed Identity and has least-privilege Key Vault permissions (get/list secrets)
+- Encryption at rest is enabled by default for Azure SQL and Storage; TLS 1.2 enforced for storage
 
-## Cleanup Bash
--- az group delete -n bbg-rg-dev --yes --no-wait
+### 6) Monitoring & Logging (Bonus)
+- Log Analytics Workspace + Application Insights
+- CPU metric alert triggers if average VMSS CPU > 80% over 10 minutes
 
+## Deploy Locally
+Prereqs:
+- Azure CLI installed
+- PowerShell
+- `az login` completed
 
+```powershell
+./scripts/deploy.ps1 -SubscriptionId "<SUB_ID>" -ResourceGroupName "bbg-rg-dev" -Location "eastus2" -Environment "dev"
