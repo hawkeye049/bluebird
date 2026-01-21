@@ -30,18 +30,27 @@ try {
   $sqlPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sqlPass))
 
   Write-Host "Running What-If..."
-  az deployment group what-if --resource-group $ResourceGroupName --template-file $templateFile --parameters @$paramFile vmAdminPassword=$vmPlain sqlAdminPassword=$sqlPlain | Out-Null
+  az deployment group what-if `
+    --resource-group $ResourceGroupName `
+    --template-file $templateFile `
+    --parameters @$paramFile `
+    --parameters vmAdminPassword=$vmPlain sqlAdminPassword=$sqlPlain | Out-Null
 
   Write-Host "Deploying..."
-  $outputsJson = az deployment group create --resource-group $ResourceGroupName --template-file $templateFile --parameters @$paramFile vmAdminPassword=$vmPlain sqlAdminPassword=$sqlPlain --query "properties.outputs" -o json
-  $outputs = $outputsJson | ConvertFrom-Json
+  $outputsJson = az deployment group create `
+    --resource-group $ResourceGroupName `
+    --template-file $templateFile `
+    --parameters @$paramFile `
+    --parameters vmAdminPassword=$vmPlain sqlAdminPassword=$sqlPlain `
+    --query "properties.outputs" -o json
 
+  $outputs = $outputsJson | ConvertFrom-Json
   $appUrl = $outputs.appUrl.value
   Write-Host "App URL: $appUrl"
 
   Write-Host "Health check..."
   $health = "$appUrl/health"
-  $resp = Invoke-WebRequest -Uri $health -UseBasicParsing -TimeoutSec 60
+  $resp = Invoke-WebRequest -Uri $health -UseBasicParsing -TimeoutSec 120
   if ($resp.StatusCode -ne 200) { throw "Health check failed: $health" }
 
   Write-Host "Deployment successful."
