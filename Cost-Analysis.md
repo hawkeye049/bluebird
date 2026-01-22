@@ -1,5 +1,3 @@
-md_content = """# Azure Multi-Region Cost Estimate — Bluebird Cloud Exercise (HA ARM)
-
 This document estimates **monthly costs for a multi-region deployment** of the Bluebird Cloud HA architecture using:
 - **Primary Region:** East US 2 (East Coast)
 - **Secondary Region:** West US 2 (West Coast)
